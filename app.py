@@ -35,6 +35,13 @@ def debug():
         "rules": [str(rule) for rule in app.url_map.iter_rules()]
     })
 
+@app.route("/api/init-db")
+def init_db():
+    with app.app_context():
+        db.create_all()
+    return {"status": "Tablas creadas"}
+
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()  # Opcional: asegura que las tablas se creen si no existen
