@@ -9,11 +9,26 @@ class Cliente(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     telefono = db.Column(db.String(30))
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nombre": self.nombre,
+            "email": self.email,
+            "telefono": self.telefono
+        }
+
 class Tatuador(db.Model):
     __tablename__ = 'tatuadores'
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(120), nullable=False)
     estilo = db.Column(db.String(200))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nombre": self.nombre,
+            "estilo": self.estilo
+        }
 
 class Cita(db.Model):
     __tablename__ = 'citas'
@@ -28,4 +43,19 @@ class Cita(db.Model):
 
     cliente = db.relationship('Cliente', backref='citas')
     tatuador = db.relationship('Tatuador', backref='citas')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "fecha": self.fecha.isoformat(),
+            "hora_inicio": self.hora_inicio.isoformat(),
+            "hora_fin": self.hora_fin.isoformat(),
+            "descripcion": self.descripcion,
+            "imagen_url": self.imagen_url,
+            "cliente_id": self.cliente_id,
+            "tatuador_id": self.tatuador_id,
+            "cliente": self.cliente.to_dict(),
+            "tatuador": self.tatuador.to_dict()
+        }
+
 

@@ -11,10 +11,7 @@ def ping():
 @clientes_bp.route("/", methods=["GET"])
 def listar_clientes():
     clientes = Cliente.query.all()
-    return jsonify([
-        {"id": c.id, "nombre": c.nombre, "email": c.email, "telefono": c.telefono}
-        for c in clientes
-    ])
+    return jsonify([c.to_dict() for c in clientes])  # ✅ Usa to_dict()
 
 @clientes_bp.route("/", methods=["POST"])
 def crear_cliente():
@@ -22,7 +19,7 @@ def crear_cliente():
         return jsonify({"error": "Content-Type debe ser application/json"}), 400
 
     data = request.get_json()
-    missing = [k for k in ["nombre", "email"] if k not in data]
+    missing = [k for k in ["nombre", "email"] if not data.get(k)]
     if missing:
         return jsonify({"error": f"Faltan campos requeridos: {', '.join(missing)}"}), 400
 
@@ -34,7 +31,7 @@ def crear_cliente():
         )
         db.session.add(cliente)
         db.session.commit()
-        return jsonify({"mensaje": "Cliente creado", "id": cliente.id}), 201
+        return jsonify({"mensaje": "Cliente creado", "cliente": cliente.to_dict()}), 201  # ✅ Devuelve el objeto completo
     except IntegrityError:
         db.session.rollback()
         return jsonify({"error": "Email ya existe"}), 409
@@ -51,7 +48,7 @@ def actualizar_cliente(id):
     cliente.telefono = data.get("telefono", cliente.telefono)
     try:
         db.session.commit()
-        return jsonify({"mensaje": "Cliente actualizado"})
+        return jsonify({"mensaje": "Cliente actualizado", "cliente": cliente.to_dict()})  # ✅ Devuelve actualizado
     except IntegrityError:
         db.session.rollback()
         return jsonify({"error": "Email ya existe"}), 409
@@ -61,4 +58,5 @@ def eliminar_cliente(id):
     cliente = Cliente.query.get_or_404(id)
     db.session.delete(cliente)
     db.session.commit()
-    return jsonify({"mensaje": "Cliente eliminado"})
+    return jsonify({"mensaje": "Cliente eliminado", "id": id})  # ✅ Devuelve el ID eliminado
+

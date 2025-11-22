@@ -5,30 +5,28 @@ import xml.etree.ElementTree as ET
 
 citas_bp = Blueprint("citas", __name__)
 
-@citas_bp.get("")
+@citas_bp.route("/", methods=["GET"])
 def listar_citas():
     citas = Cita.query.all()
-    return jsonify([
-        {
-            "id": c.id,
-            "cliente_id": c.cliente_id,
-            "cliente": {"id": c.cliente.id, "nombre": c.cliente.nombre} if c.cliente else None,
-            "tatuador_id": c.tatuador_id,
-            "tatuador": {"id": c.tatuador.id, "nombre": c.tatuador.nombre, "estilo": c.tatuador.estilo} if c.tatuador else None,
-            "fecha": c.fecha.isoformat(),
-            "hora_inicio": c.hora_inicio.strftime("%H:%M"),
-            "hora_fin": c.hora_fin.strftime("%H:%M"),
-            "descripcion": c.descripcion,
-            "imagen_url": c.imagen_url
-        } for c in citas
-    ])
+    return jsonify([c.to_dict() for c in citas])  # ✅ Usa to_dict()
 
-@citas_bp.post("")
+@citas_bp.route("/", methods=["POST"])
 def crear_cita():
+    if not request.is_json:
+        return jsonify({"error": "Content-Type debe ser application/json"}), 400
+
     data = request.get_json()
-    fecha = datetime.strptime(data["fecha"], "%Y-%m-%d").date()
-    hora_inicio = datetime.strptime(data["hora_inicio"], "%H:%M").time()
-    hora_fin = datetime.strptime(data["hora_fin"], "%H:%M").time()
+    required = ["fecha", "hora_inicio", "hora_fin", "cliente_id", "tatuador_id"]
+    missing = [k for k in required if not data.get(k)]
+    if missing:
+        return jsonify({"error": f"Faltan campos requeridos: {', '.join(missing)}"}), 400
+
+    try:
+        fecha = datetime.strptime(data["fecha"], "%Y-%m-%d").date()
+        hora_inicio = datetime.strptime(data["hora_inicio"], "%H:%M").time()
+        hora_fin = datetime.strptime(data["hora_fin"], "%H:%M").time()
+    except ValueError:
+        return jsonify({"error": "Formato de fecha u hora inválido"}), 400
 
     # Validación de solapamiento
     solapada = Cita.query.filter_by(tatuador_id=data["tatuador_id"], fecha=fecha).filter(
@@ -50,40 +48,43 @@ def crear_cita():
     )
     db.session.add(cita)
     db.session.commit()
-    return jsonify({"mensaje": "Cita creada", "id": cita.id}), 201
+    return jsonify({"mensaje": "Cita creada", "cita": cita.to_dict()}), 201  # ✅ Devuelve objeto completo
 
-@citas_bp.put("<int:id>")
+@citas_bp.route("/<int:id>", methods=["PUT"])
 def actualizar_cita(id):
     cita = Cita.query.get_or_404(id)
+    if not request.is_json:
+        return jsonify({"error": "Content-Type debe ser application/json"}), 400
+
     data = request.get_json()
 
-    if "fecha" in data:
-        cita.fecha = datetime.strptime(data["fecha"], "%Y-%m-%d").date()
-    if "hora_inicio" in data:
-        cita.hora_inicio = datetime.strptime(data["hora_inicio"], "%H:%M").time()
-    if "hora_fin" in data:
-        cita.hora_fin = datetime.strptime(data["hora_fin"], "%H:%M").time()
+    try:
+        if "fecha" in data:
+            cita.fecha = datetime.strptime(data["fecha"], "%Y-%m-%d").date()
+        if "hora_inicio" in data:
+            cita.hora_inicio = datetime.strptime(data["hora_inicio"], "%H:%M").time()
+        if "hora_fin" in data:
+            cita.hora_fin = datetime.strptime(data["hora_fin"], "%H:%M").time()
+    except ValueError:
+        return jsonify({"error": "Formato de fecha u hora inválido"}), 400
 
     cita.descripcion = data.get("descripcion", cita.descripcion)
     cita.imagen_url = data.get("imagen_url", cita.imagen_url)
     db.session.commit()
-    return jsonify({"mensaje": "Cita actualizada"})
+    return jsonify({"mensaje": "Cita actualizada", "cita": cita.to_dict()})  # ✅ Devuelve actualizado
 
-@citas_bp.delete("<int:id>")
+@citas_bp.route("/<int:id>", methods=["DELETE"])
 def eliminar_cita(id):
     cita = Cita.query.get_or_404(id)
     db.session.delete(cita)
     db.session.commit()
-    return jsonify({"mensaje": "Cita eliminada"})
+    return jsonify({"mensaje": "Cita eliminada", "id": id})  # ✅ Devuelve ID eliminado
 
-
-# 🚀 Nuevo endpoint: Exportar citas en XML agrupadas por tatuador con totales y porcentajes
-@citas_bp.get("xml")
+@citas_bp.route("/xml", methods=["GET"])
 def exportar_citas_xml():
     tatuadores_dict = {}
-
     citas = Cita.query.all()
-    total_general = len(citas)  # 🔹 total de citas en el sistema
+    total_general = len(citas)
 
     for c in citas:
         t = c.tatuador
@@ -96,12 +97,9 @@ def exportar_citas_xml():
         tatuadores_dict[t.id]["citas"].append(c)
 
     root = ET.Element("reporte")
-
-    # 🔹 Nodo global con total general
     resumen_el = ET.SubElement(root, "resumen")
     ET.SubElement(resumen_el, "total_general").text = str(total_general)
 
-    # 🔹 Nodos por tatuador
     for tid, data in tatuadores_dict.items():
         total_tatuador = len(data["citas"])
         porcentaje = (total_tatuador / total_general * 100) if total_general > 0 else 0
